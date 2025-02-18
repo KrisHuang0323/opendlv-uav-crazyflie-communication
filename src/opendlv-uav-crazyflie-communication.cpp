@@ -92,12 +92,14 @@ int32_t main(int32_t argc, char **argv) {
                 packet = PacketUtils::takeoffCommand(cur_z + cfcommand.height(), 0.0f, cfcommand.time()); 
                 break;
             case 1: // Land
+            {
                 float height = cur_z - cfcommand.height();
                 if ( height <= 0.0f ){
                     height = 0.0f;
                 }
                 packet = PacketUtils::landCommand(height, 0.0f, cfcommand.time()); 
                 break;
+            }
             case 2: // Stop
                 packet = PacketUtils::stopCommand(); 
                 break;

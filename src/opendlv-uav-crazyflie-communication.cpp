@@ -33,18 +33,17 @@
 
 using namespace bitcraze::crazyflieLinkCpp;
 
-std::vector<uint8_t> stringToArray(const std::string& str, uint8_t size) {
-    std::vector<uint8_t> arr{};
-    std::istringstream iss(str);
-    int value;
-    size_t i = 0;
+#include <cmath>
 
-    while (iss >> value && i < size) {
-        arr[i++] = static_cast<uint8_t>(value);
+float quantizeYaw(float yaw) {
+    if (yaw <= 2.5f)
+        return 1.25f;
+    else {
+        int bucket = static_cast<int>(std::ceil((yaw - 2.5f) / 2.5f));
+        return bucket * 2.5f + 1.25f;
     }
-
-    return arr;
 }
+
 
 int32_t main(int32_t argc, char **argv) {
     int32_t retCode{1};
@@ -76,7 +75,12 @@ int32_t main(int32_t argc, char **argv) {
     std::mutex Mutex;
     bitcraze::crazyflieLinkCpp::Packet packet;
     bool isCommandReceived = false;
-    auto onCommandReceived = [&cf, &packet, &Mutex, &isCommandReceived](cluon::data::Envelope &&env){
+    float cur_x{0};
+    float cur_y{0};
+    float cur_z{0};
+    float cur_yaw{0};
+    auto onCommandReceived = [&cf, &packet, &Mutex, &isCommandReceived,
+                              &cur_x, &cur_y, &cur_z, &cur_yaw](cluon::data::Envelope &&env){
         auto senderStamp = env.senderStamp();
         // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
         opendlv::logic::action::CrazyFlieCommand cfcommand = cluon::extractMessage<opendlv::logic::action::CrazyFlieCommand>(std::move(env));
@@ -85,16 +89,20 @@ int32_t main(int32_t argc, char **argv) {
         std::lock_guard<std::mutex> lck(Mutex);
         switch (senderStamp) {
             case 0: // Takeoff
-                packet = PacketUtils::takeoffCommand(cfcommand.height(), cfcommand.yaw(), cfcommand.time()); 
+                packet = PacketUtils::takeoffCommand(cur_z + cfcommand.height(), 0.0f, cfcommand.time()); 
                 break;
             case 1: // Land
-                packet = PacketUtils::landCommand(cfcommand.height(), cfcommand.yaw(), cfcommand.time()); 
+                float height = cur_z - cfcommand.height();
+                if ( height <= 0.0f ){
+                    height = 0.0f;
+                }
+                packet = PacketUtils::landCommand(height, 0.0f, cfcommand.time()); 
                 break;
             case 2: // Stop
                 packet = PacketUtils::stopCommand(); 
                 break;
             case 3: // Goto
-                packet = PacketUtils::gotoCommand(cfcommand.x(), cfcommand.y(), cfcommand.z(), cfcommand.yaw(), cfcommand.time()); 
+                packet = PacketUtils::gotoCommand(cur_x + cfcommand.x(), cur_y + cfcommand.y(), cur_z + cfcommand.z(), cur_yaw + cfcommand.yaw(), cfcommand.time()); 
                 break;
         }
         isCommandReceived = true;
@@ -106,11 +114,10 @@ int32_t main(int32_t argc, char **argv) {
 
     // Listen to crazyflie to get log data
     int res = cf.createLogBlock({
+        {"pm", "vbat"},
         {"stateEstimate", "x"}, {"stateEstimate", "y"}, {"stateEstimate", "z"},
-        {"stateEstimate", "roll"}, {"stateEstimate", "pitch"}, {"stateEstimate", "yaw"},
-                                },
-                                "test");
-
+        {"stateEstimate", "pitch"}, {"stateEstimate", "yaw"},},
+        "test");
     if (res < 0)
         std::cout << "creation Error: " << res << std::endl;
     res = cf.startLogBlock(10, "test");
@@ -127,7 +134,8 @@ int32_t main(int32_t argc, char **argv) {
     std::atomic<bool> isCallbackFinished(false);
     std::atomic<bool> *isCallbackFinishedPtr = &isCallbackFinished;
     std::cout << "pass " << res << std::endl;
-    cf.addLogCallback([&od4, isFinishedPtr, muPtr, waitTillFinishedPtr, isCallbackFinishedPtr](const std::map<TocItem,boost::spirit::hold_any>& tocItemsAndValues, uint32_t period)
+    cf.addLogCallback([&od4, isFinishedPtr, muPtr, waitTillFinishedPtr, isCallbackFinishedPtr
+                      ,&cur_x, &cur_y, &cur_z, &cur_yaw](const std::map<TocItem,boost::spirit::hold_any>& tocItemsAndValues, uint32_t period)
     {
         std::cout <<"  period:  " << period << "  val=  ";
         for(auto element : tocItemsAndValues){            
@@ -136,18 +144,37 @@ int32_t main(int32_t argc, char **argv) {
         std::cout << std::endl;
         opendlv::sim::Frame frame;
         auto it = tocItemsAndValues.begin();
-        frame.x(it->second.cast<float>());
         std::advance(it, 1);
-        frame.y(it->second.cast<float>());
+        cur_x = it->second.cast<float>();
+        frame.x(cur_x);
+        // frame.x(1.05f);
         std::advance(it, 1);
-        frame.z(it->second.cast<float>());
+        cur_y = it->second.cast<float>();
+        frame.y(cur_y);
+        // frame.y(-0.05f);
         std::advance(it, 1);
-        frame.roll(it->second.cast<float>());
+        cur_z = it->second.cast<float>();
+        frame.z(cur_z);
+        // frame.z(0.1f);
+        // std::advance(it, 1);
+        // frame.roll(it->second.cast<float>());
         std::advance(it, 1);
-        frame.pitch(it->second.cast<float>());
+        frame.pitch(it->second.cast<float>() / 180.0f * M_PI);
         std::advance(it, 1);
-        frame.yaw(it->second.cast<float>());
-        od4.send(frame);
+        cur_yaw = it->second.cast<float>() / 180.0f * M_PI;
+        frame.yaw(cur_yaw);
+        // frame.yaw(yaw_test);   
+        // yaw_test = yaw_test + 0.1;
+
+        // frame.yaw(-5.5);  
+        cluon::data::TimeStamp sampleTime;
+        od4.send(frame, sampleTime, 0);
+
+        // frame.x(0.3f);
+        // frame.y(0.3f);
+        // frame.z(0.1f);
+        // frame.yaw(0.0f);  
+        // od4.send(frame, sampleTime, 2);
 
         if ((bool)*isFinishedPtr)
         {
@@ -157,6 +184,42 @@ int32_t main(int32_t argc, char **argv) {
         }
         return true;
     },"test");
+
+    // res = cf.createLogBlock({
+    //     {"pm", "vbat"}},
+    //     "test_pm");
+    // if (res < 0)
+    //     std::cout << "creation Error: " << res << std::endl;
+
+    // std::mutex mu_1;
+    // std::unique_lock<std::mutex> lock_1(mu_1);
+    // std::mutex *muPtr_1 = &mu_1;
+    // std::condition_variable waitTillFinished_1;
+    // std::condition_variable *waitTillFinishedPtr_1 = &waitTillFinished_1;
+    // std::atomic<bool> isFinished_1(false);
+    // std::atomic<bool> *isFinishedPtr_1 = &isFinished_1;
+    // std::atomic<bool> isCallbackFinished_1(false);
+    // std::atomic<bool> *isCallbackFinishedPtr_1 = &isCallbackFinished_1;
+    // cf.addLogCallback([isFinishedPtr_1, muPtr_1, waitTillFinishedPtr_1, isCallbackFinishedPtr_1](const std::map<TocItem,boost::spirit::hold_any>& tocItemsAndValues, uint32_t period)
+    // {
+    //     std::cout <<"  period:  " << period << "  battery val=  ";
+    //     for(auto element : tocItemsAndValues){            
+    //         std::cout << element.second<<"  ";
+    //     }
+    //     std::cout << std::endl;
+
+    //     if ((bool)*isFinishedPtr_1)
+    //     {
+    //         *isCallbackFinishedPtr_1 = true;
+    //         waitTillFinishedPtr_1->notify_all();
+    //         return false;
+    //     }
+    //     return true;
+    // },"test_pm");
+    // res = cf.startLogBlock(1000, "test_pm");
+    // if (res < 0)
+    //     std::cout << "starting Error: " << res << std::endl;
+    // std::cout << "pass " << res << std::endl;
     
     // Create thread to listen to od4
     std::thread od4Thread([&od4, &cf, isFinishedPtr, &isCommandReceived, &packet]() {           
@@ -175,16 +238,21 @@ int32_t main(int32_t argc, char **argv) {
     // Wait for some actions to stop the process
     std::cout << "Press Enter to exit..." << std::endl;
     lock.unlock();
+    // lock_1.unlock();
     std::cin.getline(nullptr, 0, '\n');
     lock.lock();
+    // lock.lock();
     isFinished = true;
+    // isFinished_1 = true;
     
     // Wait for all threads to finish
     if (od4Thread.joinable()) {
         od4Thread.join();
     }
     waitTillFinished.wait(lock, [isCallbackFinishedPtr]()
-                          { return (bool)*isCallbackFinishedPtr; });    
+                          { return (bool)*isCallbackFinishedPtr; });   
+    // waitTillFinished_1.wait(lock_1, [isCallbackFinishedPtr_1]()
+    //                     { return (bool)*isCallbackFinishedPtr_1; });  
     std::cout << "Program exiting." << std::endl;
 
     retCode = 0;

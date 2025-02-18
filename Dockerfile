@@ -21,7 +21,9 @@ RUN apt-get install -y \
     build-essential \
     cmake \
     software-properties-common \
-    libopencv-dev
+    libopencv-dev \
+    libusb-1.0-0-dev \
+    libboost-all-dev
 
 RUN add-apt-repository -y ppa:chrberger/libcluon
 RUN apt-get update
@@ -53,4 +55,4 @@ RUN apt-get install -y \
 
 WORKDIR /usr/bin
 COPY --from=builder /tmp/dest /usr
-ENTRYPOINT ["/usr/bin/opendlv-perception-helloworld"]
+ENTRYPOINT ["/usr/bin/opendlv-uav-crazyflie-communication"]

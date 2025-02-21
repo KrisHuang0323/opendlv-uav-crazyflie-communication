@@ -1,0 +1,67 @@
+version: "3.6"
+
+services:
+  # sim-global:
+  #   image: chalmersrevere/opendlv-sim-global-amd64:v0.0.7
+  #   network_mode: "host"
+  #   command: "/usr/bin/opendlv-sim-global --cid=111 --freq=20 --frame-id=0 --x=0.0 --yaw=0.2"
+
+  # sim-motor-kiwi:
+  #   image: chalmersrevere/opendlv-sim-motor-kiwi-amd64:v0.0.7
+  #   network_mode: "host"
+  #   command: "/usr/bin/opendlv-sim-motor-kiwi --cid=111 --freq=50 --frame-id=0"
+
+  
+  crazyflie-communication:
+    image: test/cfcom
+    ipc: "host"
+    network_mode: "host"
+    stdin_open: true
+    tty: true
+    volumes:
+      - /tmp:/tmp
+    environment:
+      - DISPLAY=${DISPLAY}
+    devices:
+      - "/dev/bus/usb:/dev/bus/usb"
+    command: "/usr/bin/opendlv-uav-crazyflie-communication --cid=111 --radiouri=radio://0/90/2M/E7E7E7E7E7"
+  sim-camera:
+    container_name: sim-camera
+    image: chalmersrevere/opendlv-sim-camera-mesa:v0.0.1
+    ipc: "host"
+    network_mode: "host"
+    volumes:
+      - /home/dronehq/Thesis_Crazyflie/resource/example_map:/opt/map
+      - /tmp:/tmp
+    environment:
+      - DISPLAY=${DISPLAY}
+    command: "--cid=111 --frame-id=0 --map-path=/opt/map --x=0.0 --z=0.095 --width=640 --height=480 --fovy=48.8 --freq=7.5 --verbose"
+  Wait:
+    image: alpine
+    depends_on:
+      crazyflie-communication:
+        condition: service_started
+    command: "sleep 10"
+  crazyflie-control:
+    image: test/control
+    depends_on:
+      Wait:
+        condition: service_completed_successfully
+    ipc: "host"
+    network_mode: "host"
+    volumes:
+      - /tmp:/tmp
+    environment:
+      - DISPLAY=${DISPLAY}
+    command: "/usr/bin/opendlv-uav-control-lowlevel --cid=111"
+
+  # opendlv-kiwi-view:
+  #   image: chrberger/opendlv-kiwi-view-webrtc-multi:v0.0.6
+  #   network_mode: "host"
+  #   volumes:
+  #     - ~/recordings:/opt/vehicle-view/recordings
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   environment:
+  #     - PORT=8081
+  #     - OD4SESSION_CID=111
+  #     - PLAYBACK_OD4SESSION_CID=253

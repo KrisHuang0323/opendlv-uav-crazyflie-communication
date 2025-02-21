@@ -89,22 +89,22 @@ int32_t main(int32_t argc, char **argv) {
         std::lock_guard<std::mutex> lck(Mutex);
         switch (senderStamp) {
             case 0: // Takeoff
-                packet = PacketUtils::takeoffCommand(cur_z + cfcommand.height(), 0.0f, cfcommand.time()); 
+                packet = PacketUtils::takeoffCommand(cfcommand.height(), 0.0f, cfcommand.time()); 
                 break;
             case 1: // Land
             {
-                float height = cur_z - cfcommand.height();
-                if ( height <= 0.0f ){
-                    height = 0.0f;
-                }
-                packet = PacketUtils::landCommand(height, 0.0f, cfcommand.time()); 
+                // float height = cur_z - cfcommand.height();
+                // if ( height <= 0.0f ){
+                //     height = 0.0f;
+                // }
+                packet = PacketUtils::landCommand(cfcommand.height(), 0.0f, cfcommand.time()); 
                 break;
             }
             case 2: // Stop
                 packet = PacketUtils::stopCommand(); 
                 break;
             case 3: // Goto
-                packet = PacketUtils::gotoCommand(cur_x + cfcommand.x(), cur_y + cfcommand.y(), cur_z + cfcommand.z(), cur_yaw + cfcommand.yaw(), cfcommand.time()); 
+                packet = PacketUtils::gotoCommand(cfcommand.x(), cfcommand.y(), cfcommand.z(), cfcommand.yaw(), cfcommand.time()); 
                 break;
         }
         isCommandReceived = true;

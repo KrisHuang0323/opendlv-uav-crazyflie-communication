@@ -371,3 +371,8 @@ message opendlv.logic.action.CrazyFlieCommand [id = 1192] {
   float height [id = 5];
   float time [id = 6];
 }
+
+message opendlv.logic.sensation.CrazyFlieState [id = 1193] {
+  float cur_yaw [id = 1];
+  float battery_state [id = 2];
+}

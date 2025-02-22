@@ -60,6 +60,7 @@ int32_t main(int32_t argc, char **argv) {
 
     // Try to connect to crazyflie
     const std::string str_uri{commandlineArguments["radiouri"]};
+    bool const verbose{commandlineArguments.count("verbose") != 0};
     Crazyflie cf(str_uri);
     cf.init();
     if (!cf.isRunning())
@@ -137,15 +138,19 @@ int32_t main(int32_t argc, char **argv) {
     std::atomic<bool> *isCallbackFinishedPtr = &isCallbackFinished;
     std::cout << "pass " << res << std::endl;
     cf.addLogCallback([&od4, isFinishedPtr, muPtr, waitTillFinishedPtr, isCallbackFinishedPtr
-                      ,&cur_x, &cur_y, &cur_z, &cur_yaw](const std::map<TocItem,boost::spirit::hold_any>& tocItemsAndValues, uint32_t period)
+                      ,&cur_x, &cur_y, &cur_z, &cur_yaw, &verbose](const std::map<TocItem,boost::spirit::hold_any>& tocItemsAndValues, uint32_t period)
     {
-        std::cout <<"  period:  " << period << "  val=  ";
-        for(auto element : tocItemsAndValues){            
-            std::cout << element.second<<"  ";
+        if ( verbose ){
+            std::cout <<"  period:  " << period << "  val=  ";
+            for(auto element : tocItemsAndValues){            
+                std::cout << element.second<<"  ";
+            }
+            std::cout << std::endl;
         }
-        std::cout << std::endl;
         opendlv::sim::Frame frame;
+        opendlv::logic::sensation::CrazyFlieState cfState;
         auto it = tocItemsAndValues.begin();
+        cfState.battery_state(it->second.cast<float>());
         std::advance(it, 1);
         cur_x = it->second.cast<float>();
         frame.x(cur_x);
@@ -165,12 +170,17 @@ int32_t main(int32_t argc, char **argv) {
         std::advance(it, 1);
         cur_yaw = it->second.cast<float>() / 180.0f * M_PI;
         frame.yaw(cur_yaw);
+        if ( cur_yaw < 0.0f ){
+            cur_yaw += 2 * M_PI;
+        }
+        cfState.cur_yaw(cur_yaw);
         // frame.yaw(yaw_test);   
         // yaw_test = yaw_test + 0.1;
 
         // frame.yaw(-5.5);  
         cluon::data::TimeStamp sampleTime;
         od4.send(frame, sampleTime, 0);
+        od4.send(cfState, sampleTime, 0);
 
         // frame.x(0.3f);
         // frame.y(0.3f);

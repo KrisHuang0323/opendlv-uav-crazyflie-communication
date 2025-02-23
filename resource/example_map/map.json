@@ -15,6 +15,22 @@
       "instances" : [
         [0.0, 0.0, 0.01, 0.0]
       ]
+    },
+    {
+      "name" : "target",
+      "file" : "./target.obj",
+      "color" : [0.0, 1.0, 0.0],
+      "frames" : [
+        1
+      ]
+    },  
+    {
+      "name" : "ball",
+      "file" : "./ball.obj",
+      "color" : [1.0, 0.0, 0.94],
+      "frames" : [
+        2
+      ]
     }
   ],
   "block" : [

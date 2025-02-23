@@ -1,17 +1,6 @@
 version: "3.6"
 
-services:
-  # sim-global:
-  #   image: chalmersrevere/opendlv-sim-global-amd64:v0.0.7
-  #   network_mode: "host"
-  #   command: "/usr/bin/opendlv-sim-global --cid=111 --freq=20 --frame-id=0 --x=0.0 --yaw=0.2"
-
-  # sim-motor-kiwi:
-  #   image: chalmersrevere/opendlv-sim-motor-kiwi-amd64:v0.0.7
-  #   network_mode: "host"
-  #   command: "/usr/bin/opendlv-sim-motor-kiwi --cid=111 --freq=50 --frame-id=0"
-
-  
+services:  
   crazyflie-communication:
     image: test/cfcom
     ipc: "host"
@@ -26,42 +15,96 @@ services:
       - "/dev/bus/usb:/dev/bus/usb"
     command: "/usr/bin/opendlv-uav-crazyflie-communication --cid=111 --radiouri=radio://0/90/2M/E7E7E7E7E7"
   sim-camera:
-    container_name: sim-camera
+    # container_name: sim-camera
     image: chalmersrevere/opendlv-sim-camera-mesa:v0.0.1
+    # image: test/uav-vcam-mesa
     ipc: "host"
+    # shm_size: "1gb"
     network_mode: "host"
     volumes:
-      - /home/dronehq/Thesis_Crazyflie/resource/example_map:/opt/map
+      - /home/opendlv/data/Thesis/resource/example_map:/opt/map
       - /tmp:/tmp
+      # - /tmp/.X11-unix:/tmp/.X11-unix
     environment:
       - DISPLAY=${DISPLAY}
     command: "--cid=111 --frame-id=0 --map-path=/opt/map --x=0.0 --z=0.095 --width=640 --height=480 --fovy=48.8 --freq=7.5 --verbose"
-  Wait:
-    image: alpine
-    depends_on:
-      crazyflie-communication:
-        condition: service_started
-    command: "sleep 10"
-  crazyflie-control:
-    image: test/control
-    depends_on:
-      Wait:
-        condition: service_completed_successfully
-    ipc: "host"
-    network_mode: "host"
-    volumes:
-      - /tmp:/tmp
-    environment:
-      - DISPLAY=${DISPLAY}
-    command: "/usr/bin/opendlv-uav-control-lowlevel --cid=111"
-
   # opendlv-kiwi-view:
-  #   image: chrberger/opendlv-kiwi-view-webrtc-multi:v0.0.6
+  #     container_name: kiwi-view
+  #     image: chalmersrevere/opendlv-vehicle-view-multi:v0.0.60
+  #     restart: always
+  #     network_mode: "host"
+  #     volumes:
+  #     - ./simulation-map.txt:/opt/vehicle-view/simulation-map.txt
+  #     - /home/pi/recordings:/opt/vehicle-view/recordings
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #     - ./opendlv-standard-message-set-v0.9.10.odvd:/opt/vehicle-view/opendlv-standard-message-set-v0.9.9.odvd
+  #     environment:
+  #     - OD4SESSION_CID=111
+  #     - OPENDLV_VEHICLE_VIEW_PLATFORM=Kiwi
+  #     - OPENDLV_VEHICLE_VIEW_ENABLE_KIWI_SIMULATION=1
+  # virtual-adc-bbblue-front:
+  #     # image: registry.opendlv.org/community/opendlv-virtual-adc-bbblue:1.0
+  #     image : registry.gitlab.com/kris_huang/opendlv-uav-virtual-rangefinder:1.0
+  #     # image : test/rangefinder
+  #     network_mode: "host"
+  #     volumes:
+  #       - ./simulation-map.txt:/opt/simulation-map.txt
+  #     command: "/usr/bin/opendlv-uav-virtual-rangefinder --map-file=/opt/simulation-map.txt --x=0.0175 --y=0.0 --yaw=0.0 --cid=111 --freq=10 --frame-id=0 --id=0"
+  # virtual-adc-bbblue-back:
+  #     # image: registry.opendlv.org/community/opendlv-virtual-adc-bbblue:1.0
+  #     image : registry.gitlab.com/kris_huang/opendlv-uav-virtual-rangefinder:1.0
+  #     # image : test/rangefinder
+  #     network_mode: "host"
+  #     volumes:
+  #       - ./simulation-map.txt:/opt/simulation-map.txt
+  #     command: "/usr/bin/opendlv-uav-virtual-rangefinder --map-file=/opt/simulation-map.txt --x=-0.0175 --y=0.0 --yaw=-3.14 --cid=111 --freq=10 --frame-id=0 --id=1"
+  # virtual-adc-bbblue-left:
+  #     # image: registry.opendlv.org/community/opendlv-virtual-adc-bbblue:1.0
+  #     image : registry.gitlab.com/kris_huang/opendlv-uav-virtual-rangefinder:1.0
+  #     # image : test/rangefinder
+  #     network_mode: "host"
+  #     volumes:
+  #       - ./simulation-map.txt:/opt/simulation-map.txt
+  #     command: "/usr/bin/opendlv-uav-virtual-rangefinder --map-file=/opt/simulation-map.txt --x=0.0 --y=0.0175 --yaw=1.57 --cid=111 --freq=10 --frame-id=0 --id=2"
+  # virtual-adc-bbblue-right:
+  #     # image: registry.opendlv.org/community/opendlv-virtual-adc-bbblue:1.0
+  #     image : registry.gitlab.com/kris_huang/opendlv-uav-virtual-rangefinder:1.0
+  #     # image : test/rangefinder
+  #     network_mode: "host"
+  #     volumes:
+  #       - ./simulation-map.txt:/opt/simulation-map.txt
+  #     command: "/usr/bin/opendlv-uav-virtual-rangefinder --map-file=/opt/simulation-map.txt --x=0.0 --y=-0.0175 --yaw=-1.57 --cid=111 --freq=10 --frame-id=0 --id=3"
+  # Wait:
+  #   image: alpine
+  #   depends_on:
+  #     crazyflie-communication:
+  #       condition: service_started
+  #   command: "sleep 10"
+  # ball-simulation:
+  #   image: test/ballsim
+  #   network_mode: "host"
+  #   ipc: "host"
+  #   volumes:
+  #     - /tmp:/tmp
+  #   command: "/usr/bin/opendlv-uav-ball-simulator --cid=111"
+  # state-estimator:
+  #   image: test/stestimator
+  #   network_mode: "host"
+  #   ipc: "host"
+  #   volumes:
+  #     - /tmp:/tmp
+  #   environment:
+  #     - DISPLAY=${DISPLAY}
+  #   command: "/usr/bin/opendlv-uav-state-estimator --cid=111 --name=video0.argb --verbose"
+  # crazyflie-control:
+  #   image: test/control
+  #   depends_on:
+  #     Wait:
+  #       condition: service_completed_successfully
+  #   ipc: "host"
   #   network_mode: "host"
   #   volumes:
-  #     - ~/recordings:/opt/vehicle-view/recordings
-  #     - /var/run/docker.sock:/var/run/docker.sock
+  #     - /tmp:/tmp
   #   environment:
-  #     - PORT=8081
-  #     - OD4SESSION_CID=111
-  #     - PLAYBACK_OD4SESSION_CID=253
+  #     - DISPLAY=${DISPLAY}
+  #   command: "/usr/bin/opendlv-uav-control-lowlevel --cid=111"

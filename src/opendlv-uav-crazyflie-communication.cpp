@@ -61,6 +61,7 @@ int32_t main(int32_t argc, char **argv) {
     // Try to connect to crazyflie
     const std::string str_uri{commandlineArguments["radiouri"]};
     bool const verbose{commandlineArguments.count("verbose") != 0};
+    bool const test_mode{commandlineArguments.count("test_mode") != 0};
     Crazyflie cf(str_uri);
     cf.init();
     if (!cf.isRunning())
@@ -138,7 +139,7 @@ int32_t main(int32_t argc, char **argv) {
     std::atomic<bool> *isCallbackFinishedPtr = &isCallbackFinished;
     std::cout << "pass " << res << std::endl;
     cf.addLogCallback([&od4, isFinishedPtr, muPtr, waitTillFinishedPtr, isCallbackFinishedPtr
-                      ,&cur_x, &cur_y, &cur_z, &cur_yaw, &verbose](const std::map<TocItem,boost::spirit::hold_any>& tocItemsAndValues, uint32_t period)
+                      ,&cur_x, &cur_y, &cur_z, &cur_yaw, &verbose, &test_mode](const std::map<TocItem,boost::spirit::hold_any>& tocItemsAndValues, uint32_t period)
     {
         if ( verbose ){
             std::cout <<"  period:  " << period << "  val=  ";
@@ -154,15 +155,12 @@ int32_t main(int32_t argc, char **argv) {
         std::advance(it, 1);
         cur_x = it->second.cast<float>();
         frame.x(cur_x);
-        // frame.x(1.05f);
         std::advance(it, 1);
         cur_y = it->second.cast<float>();
         frame.y(cur_y);
-        // frame.y(-0.05f);
         std::advance(it, 1);
         cur_z = it->second.cast<float>();
         frame.z(cur_z);
-        // frame.z(0.1f);
         // std::advance(it, 1);
         // frame.roll(it->second.cast<float>());
         std::advance(it, 1);
@@ -179,6 +177,12 @@ int32_t main(int32_t argc, char **argv) {
 
         // frame.yaw(-5.5);  
         cluon::data::TimeStamp sampleTime;
+        if ( test_mode ){
+            frame.x(1.0f);
+            frame.y(0.0f);
+            frame.z(1.0f);
+            frame.yaw(180.0f / 180.0f * M_PI);
+        }
         od4.send(frame, sampleTime, 0);
         od4.send(cfState, sampleTime, 0);
 

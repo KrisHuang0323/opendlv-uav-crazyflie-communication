@@ -5,14 +5,14 @@ class PacketUtils
 {
 public:
     // Constructs a high level commander goto packet
-    static bitcraze::crazyflieLinkCpp::Packet gotoCommand(float x, float y, float z, float yaw, float time) {
+    static bitcraze::crazyflieLinkCpp::Packet gotoCommand(float x, float y, float z, float yaw, float time, bool relative) {
         const uint8_t size = 25;
         std::array<uint8_t, size> buffer;
         buffer[0] = 0xFF;
         uint8_t index = 1;
         index += pack(buffer.data(), index, (uint8_t)12);    // Command (Goto = 12)
         index += pack(buffer.data(), index, (uint8_t)0);    // Group Mask (0 = all groups)
-        index += pack(buffer.data(), index, true);          // Set to true, if position/yaw are relative to current setpoint
+        index += pack(buffer.data(), index, relative);          // Set to true, if position/yaw are relative to current setpoint
         index += pack(buffer.data(), index, true);          // Set to true for linear interpolation instead of smooth polynomial
         index += pack(buffer.data(), index, x);             // x
         index += pack(buffer.data(), index, y);             // y

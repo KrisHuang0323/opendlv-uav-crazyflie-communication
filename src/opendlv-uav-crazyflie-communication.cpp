@@ -27,6 +27,7 @@
 #include <sstream>
 #include <vector>
 #include <iterator>
+
 #include "crazyflieLinkCpp/Connection.h"
 #include "PacketUtils.hpp"
 #include "Crazyflie.h"
@@ -106,7 +107,8 @@ int32_t main(int32_t argc, char **argv) {
                 packet = PacketUtils::stopCommand(); 
                 break;
             case 3: // Goto
-                packet = PacketUtils::gotoCommand(cfcommand.x(), cfcommand.y(), cfcommand.z(), cfcommand.yaw(), cfcommand.time()); 
+                bool relative{cfcommand.relative() == 1};
+                packet = PacketUtils::gotoCommand(cfcommand.x(), cfcommand.y(), cfcommand.z(), cfcommand.yaw(), cfcommand.time(), relative); 
                 break;
         }
         isCommandReceived = true;
@@ -168,9 +170,9 @@ int32_t main(int32_t argc, char **argv) {
         std::advance(it, 1);
         cur_yaw = it->second.cast<float>() / 180.0f * M_PI;
         frame.yaw(cur_yaw);
-        if ( cur_yaw < 0.0f ){
-            cur_yaw += 2 * M_PI;
-        }
+        // if ( cur_yaw < 0.0f ){
+        //     cur_yaw += 2 * M_PI;
+        // }
         cfState.cur_yaw(cur_yaw);
         // frame.yaw(yaw_test);   
         // yaw_test = yaw_test + 0.1;

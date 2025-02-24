@@ -12,6 +12,7 @@ stages:
 
 before_script:
   - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  - git submodule update --init --recursive
 
 build-amd64:
   tags:

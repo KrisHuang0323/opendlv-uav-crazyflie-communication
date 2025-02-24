@@ -370,6 +370,7 @@ message opendlv.logic.action.CrazyFlieCommand [id = 1192] {
   float yaw [id = 4];
   float height [id = 5];
   float time [id = 6];
+  uint32 relative [id = 7];
 }
 
 message opendlv.logic.sensation.CrazyFlieState [id = 1193] {

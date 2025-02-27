@@ -20,8 +20,8 @@
       "name" : "target",
       "file" : "./target.obj",
       "color" : [0.0, 1.0, 0.0],
-      "frames" : [
-        1
+      "instances" : [
+        [-1.0, -1.0, 1.0, 0.0]
       ]
     },  
     {
@@ -54,7 +54,7 @@
     },
     {
       "name" : "wall",
-      "dimension" : [4.0, 0.05, 3.0],
+      "dimension" : [4.0, 0.01, 3.0],
       "textureFile" : "./wall.jpg",
       "textureSize" : [1.0, 1.0],
       "instances" : [
@@ -66,7 +66,7 @@
     },
     {
       "name" : "obstacle2",
-      "dimension" : [0.4, 0.05, 3.0],
+      "dimension" : [0.4, 0.01, 3.0],
       "textureFile" : "./obstacle.jpg",
       "textureSize" : [1.0, 1.0],
       "instances" : [
@@ -76,7 +76,7 @@
     },
     {
       "name" : "obstacle3",
-      "dimension" : [0.2, 0.05, 3.0],
+      "dimension" : [0.2, 0.01, 3.0],
       "textureFile" : "./obstacle.jpg",
       "textureSize" : [1.0, 1.0],
       "instances" : [
@@ -86,7 +86,7 @@
     },
     {
       "name" : "obstacle4",
-      "dimension" : [0.8, 0.05, 3.0],
+      "dimension" : [0.8, 0.01, 3.0],
       "textureFile" : "./obstacle.jpg",
       "textureSize" : [1.0, 1.0],
       "instances" : [
@@ -95,7 +95,7 @@
     },
     {
       "name" : "obstacle5",
-      "dimension" : [1.1, 0.05, 3.0],
+      "dimension" : [1.1, 0.01, 3.0],
       "textureFile" : "./obstacle.jpg",
       "textureSize" : [1.0, 1.0],
       "instances" : [
@@ -104,7 +104,7 @@
     },
     {
       "name" : "obstacle6",
-      "dimension" : [0.3, 0.05, 3.0],
+      "dimension" : [0.3, 0.01, 3.0],
       "textureFile" : "./obstacle.jpg",
       "textureSize" : [1.0, 1.0],
       "instances" : [
@@ -113,7 +113,7 @@
     },
     {
       "name" : "obstacle7",
-      "dimension" : [1.0, 0.05, 3.0],
+      "dimension" : [1.0, 0.01, 3.0],
       "textureFile" : "./obstacle.jpg",
       "textureSize" : [1.0, 1.0],
       "instances" : [

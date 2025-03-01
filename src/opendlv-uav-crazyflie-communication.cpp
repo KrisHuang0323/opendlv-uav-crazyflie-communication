@@ -28,23 +28,110 @@
 #include <vector>
 #include <iterator>
 
-#include "crazyflieLinkCpp/Connection.h"
-#include "PacketUtils.hpp"
-#include "Crazyflie.h"
-
-using namespace bitcraze::crazyflieLinkCpp;
+#include <boost/program_options.hpp>
+#include <crazyflie_cpp/Crazyflie.h>
+#include <chrono>
 
 #include <cmath>
 
-float quantizeYaw(float yaw) {
-    if (yaw <= 2.5f)
-        return 1.25f;
-    else {
-        int bucket = static_cast<int>(std::ceil((yaw - 2.5f) / 2.5f));
-        return bucket * 2.5f + 1.25f;
-    }
+struct log {
+  float x;
+  float y;
+  float z;
+  float pitch;
+  float yaw;
+  float pm_vbat;
+} __attribute__((packed));
+
+struct command {
+  float x;
+  float y;
+  float z;
+  float yaw;
+  float vx;
+  float vy;
+  float yawRate;
+  float height;
+  float time;
+  int16_t Type;
+} __attribute__((packed));
+
+volatile bool g_done = false;
+
+void onLogData(uint32_t /*time_in_ms*/, const struct log* data)
+{
+    // std::cout << data->pm_extVbat << std::endl;
+    // std::cout << data->pm_extCurr << std::endl;
+    g_done = true;
 }
 
+bool InitializeCrazyflie(std::unique_ptr<Crazyflie>& cf, std::unique_ptr<LogBlock<struct log> >& logBlock, const std::string& uri, cluon::OD4Session& od4, bool verbose, bool test_mode, int16_t frame_id) {
+    std::cout << "Initializing Crazyflie..." << std::endl;
+    try{
+        cf.reset(new Crazyflie(uri));
+        cf->logReset();
+        cf->requestLogToc();
+
+        // std::unique_ptr<LogBlock<struct log> > logBlock;
+        std::function<void(uint32_t, const struct log*)> cb = 
+        [&od4, &verbose, &test_mode, &frame_id](uint32_t /*time_in_ms*/, const struct log* data) {
+            if ( verbose ){
+                std::cout << "Message received, x:" << data->x << ", y:" << data->y << ", z:" << data->z << ", pitch:" << data->pitch << ", yaw:" << data->yaw << ", voltage:" << data->pm_vbat << std::endl;
+            }
+
+            // Send message by od4
+            opendlv::sim::Frame frame;
+            opendlv::logic::sensation::CrazyFlieState cfState;
+            cfState.battery_state(data->pm_vbat);
+            cfState.cur_yaw(data->yaw / 180.0f * M_PI);
+
+            frame.x(data->x);
+            frame.y(data->y);
+            frame.z(data->z);
+            frame.pitch(data->pitch / 180.0f * M_PI);
+            frame.yaw(data->yaw / 180.0f * M_PI);
+            
+            if ( test_mode ){
+                frame.x(1.0f);
+                frame.y(0.0f);
+                frame.z(1.0f);
+                frame.yaw(180.0f / 180.0f * M_PI);
+            }
+
+            cluon::data::TimeStamp sampleTime;
+            od4.send(frame, sampleTime, frame_id);
+            od4.send(cfState, sampleTime, frame_id);
+
+            g_done = true;
+        };
+
+        logBlock.reset(new LogBlock<struct log>(
+            cf.get(),{
+            {"stateEstimate", "x"},
+            {"stateEstimate", "y"},
+            {"stateEstimate", "z"},
+            {"stateEstimate", "pitch"},
+            {"stateEstimate", "yaw"},
+            {"pm", "vbat"}
+            // {"pm", "chargeCurrent"}
+            }, cb));
+        logBlock->start(10); // 100ms
+
+        // Check that whether the connection succeed
+        // std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        // while (true) {
+        //     cf->sendPing();
+        //     std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        // }
+        // std::cout << "Connection succeed!!" << std::endl;
+
+        return true;
+    }
+    catch(std::exception& e){
+        std::cerr << "Initialize failed due to: " << e.what() << std::endl;
+        return false;
+    }
+}
 
 int32_t main(int32_t argc, char **argv) {
     int32_t retCode{1};
@@ -58,32 +145,32 @@ int32_t main(int32_t argc, char **argv) {
         std::cerr << "You should include the radiouri to start communicate to crazyflie" << std::endl;
         return retCode;
     }
-
-    // Try to connect to crazyflie
-    const std::string str_uri{commandlineArguments["radiouri"]};
-    bool const verbose{commandlineArguments.count("verbose") != 0};
-    bool const test_mode{commandlineArguments.count("test_mode") != 0};
-    Crazyflie cf(str_uri);
-    cf.init();
-    if (!cf.isRunning())
-    {
-        std::cerr << "Failed to initialize Crazyflie" << std::endl;
+    
+    if ( (0 == commandlineArguments.count("frameId")) ) {
+        std::cerr << "You should include the frameId to specify which crazyflie are you refering to" << std::endl;
         return retCode;
     }
-    std::cout << "Initialize Crazyflie..." << std::endl;    
 
-    // Interface to a running OpenDaVINCI session; here, you can send and receive messages.
-    cluon::OD4Session od4{static_cast<uint16_t>(std::stoi(commandlineArguments["cid"]))};    
-    // Handler to receive distance readings (realized as C++ lambda).
+    const std::string str_uri{commandlineArguments["radiouri"]};
+    const int16_t frame_id{ static_cast<int16_t>(std::stoi(commandlineArguments["frameId"])) };
+    bool const verbose{commandlineArguments.count("verbose") != 0};
+    bool const test_mode{commandlineArguments.count("test_mode") != 0};
+
+    // Create a od4 session
+    cluon::OD4Session od4{static_cast<uint16_t>(std::stoi(commandlineArguments["cid"]))};
+
+    // Try to connect to crazyflie
+    std::unique_ptr<Crazyflie> cf;
+    std::unique_ptr<LogBlock<struct log> > logBlock;
+    if ( !InitializeCrazyflie( cf, logBlock, str_uri, od4, verbose, test_mode, frame_id) )
+        return 1;    
+    std::cout << "Connected to crazyflie." << std::endl;
+
+    // Connect to the od4 session 
     std::mutex Mutex;
-    bitcraze::crazyflieLinkCpp::Packet packet;
+    command inputCommand;
     bool isCommandReceived = false;
-    float cur_x{0};
-    float cur_y{0};
-    float cur_z{0};
-    float cur_yaw{0};
-    auto onCommandReceived = [&cf, &packet, &Mutex, &isCommandReceived,
-                              &cur_x, &cur_y, &cur_z, &cur_yaw](cluon::data::Envelope &&env){
+    auto onCommandReceived = [&Mutex, &inputCommand, &isCommandReceived](cluon::data::Envelope &&env){
         auto senderStamp = env.senderStamp();
         // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
         opendlv::logic::action::CrazyFlieCommand cfcommand = cluon::extractMessage<opendlv::logic::action::CrazyFlieCommand>(std::move(env));
@@ -92,186 +179,89 @@ int32_t main(int32_t argc, char **argv) {
         std::lock_guard<std::mutex> lck(Mutex);
         switch (senderStamp) {
             case 0: // Takeoff
-                packet = PacketUtils::takeoffCommand(cfcommand.height(), 0.0f, cfcommand.time()); 
+                inputCommand.Type = 0;
+                inputCommand.height = cfcommand.height();
+                inputCommand.time = cfcommand.time();
                 break;
             case 1: // Land
-            {
-                // float height = cur_z - cfcommand.height();
-                // if ( height <= 0.0f ){
-                //     height = 0.0f;
-                // }
-                packet = PacketUtils::landCommand(cfcommand.height(), 0.0f, cfcommand.time()); 
+                inputCommand.Type = 1;
+                inputCommand.height = cfcommand.height();
+                inputCommand.time = cfcommand.time();
                 break;
-            }
             case 2: // Stop
-                packet = PacketUtils::stopCommand(); 
+                inputCommand.Type = 2;
                 break;
             case 3: // Goto
-                bool relative{cfcommand.relative() == 1};
-                packet = PacketUtils::gotoCommand(cfcommand.x(), cfcommand.y(), cfcommand.z(), cfcommand.yaw(), cfcommand.time(), relative); 
+                inputCommand.Type = 3;
+                inputCommand.x = cfcommand.x();
+                inputCommand.y = cfcommand.y();
+                inputCommand.z = cfcommand.z();
+                inputCommand.yaw = cfcommand.yaw();
+                inputCommand.time = cfcommand.time();
+                break;
+            case 4: // Hovering
+                inputCommand.Type = 4;
+                inputCommand.vx = cfcommand.vx();
+                inputCommand.vy = cfcommand.vy();
+                inputCommand.yawRate = cfcommand.yawRate();
+                inputCommand.z = cfcommand.z();
                 break;
         }
         isCommandReceived = true;
-        std::cout << "Set to packet" << std::endl; 
+        std::cout << "Command received with type: " << senderStamp << std::endl; 
     };
     // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
     od4.dataTrigger(opendlv::logic::action::CrazyFlieCommand::ID(), onCommandReceived);  
     std::cout << "Subscribe to od4." << std::endl;
 
-    // Listen to crazyflie to get log data
-    int res = cf.createLogBlock({
-        {"pm", "vbat"},
-        {"stateEstimate", "x"}, {"stateEstimate", "y"}, {"stateEstimate", "z"},
-        {"stateEstimate", "pitch"}, {"stateEstimate", "yaw"},},
-        "test");
-    if (res < 0)
-        std::cout << "creation Error: " << res << std::endl;
-    res = cf.startLogBlock(10, "test");
-    if (res < 0)
-        std::cout << "starting Error: " << res << std::endl;
-    
-    std::mutex mu;
-    std::unique_lock<std::mutex> lock(mu);
-    std::mutex *muPtr = &mu;
-    std::condition_variable waitTillFinished;
-    std::condition_variable *waitTillFinishedPtr = &waitTillFinished;
-    std::atomic<bool> isFinished(false);
-    std::atomic<bool> *isFinishedPtr = &isFinished;
-    std::atomic<bool> isCallbackFinished(false);
-    std::atomic<bool> *isCallbackFinishedPtr = &isCallbackFinished;
-    std::cout << "pass " << res << std::endl;
-    cf.addLogCallback([&od4, isFinishedPtr, muPtr, waitTillFinishedPtr, isCallbackFinishedPtr
-                      ,&cur_x, &cur_y, &cur_z, &cur_yaw, &verbose, &test_mode](const std::map<TocItem,boost::spirit::hold_any>& tocItemsAndValues, uint32_t period)
-    {
-        if ( verbose ){
-            std::cout <<"  period:  " << period << "  val=  ";
-            for(auto element : tocItemsAndValues){            
-                std::cout << element.second<<"  ";
+    // Start the looping here
+    while(od4.isRunning()){
+        // std::cout << "Loop start..." << std::endl;
+        try{
+            if (true) {
+                cf->sendPing();
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
-            std::cout << std::endl;
+            // std::cout << "Connection succeed!!" << std::endl;
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+            if ( isCommandReceived == false )
+                continue;
+
+            int16_t group_mask = 0;
+            // std::cout << "Received command..." << std::endl;
+            switch (inputCommand.Type)
+            {
+                case 0: // Takeoff
+                    cf->takeoff(inputCommand.height, 0.0f, group_mask);
+                    break;
+                case 1: // Land
+                    cf->land(inputCommand.height, 0.0f, group_mask);
+                    break;
+                case 2: // Stop
+                    cf->stop(group_mask);
+                    break;
+                case 3: // Goto
+                    {
+                        bool relative = false;
+                        cf->goTo(inputCommand.x, inputCommand.y, inputCommand.z, inputCommand.yaw, inputCommand.time, relative, group_mask);
+                        break;                        
+                    }                    
+                case 4: // Hovering
+                    cf->sendHoverSetpoint(inputCommand.vx, inputCommand.vy, inputCommand.yawRate, inputCommand.z);
+                    break;
+            }
+            isCommandReceived = false;
         }
-        opendlv::sim::Frame frame;
-        opendlv::logic::sensation::CrazyFlieState cfState;
-        auto it = tocItemsAndValues.begin();
-        cfState.battery_state(it->second.cast<float>());
-        std::advance(it, 1);
-        cur_x = it->second.cast<float>();
-        frame.x(cur_x);
-        std::advance(it, 1);
-        cur_y = it->second.cast<float>();
-        frame.y(cur_y);
-        std::advance(it, 1);
-        cur_z = it->second.cast<float>();
-        frame.z(cur_z);
-        // std::advance(it, 1);
-        // frame.roll(it->second.cast<float>());
-        std::advance(it, 1);
-        frame.pitch(it->second.cast<float>() / 180.0f * M_PI);
-        std::advance(it, 1);
-        cur_yaw = it->second.cast<float>() / 180.0f * M_PI;
-        frame.yaw(cur_yaw);
-        // if ( cur_yaw < 0.0f ){
-        //     cur_yaw += 2 * M_PI;
-        // }
-        cfState.cur_yaw(cur_yaw);
-        // frame.yaw(yaw_test);   
-        // yaw_test = yaw_test + 0.1;
-
-        // frame.yaw(-5.5);  
-        cluon::data::TimeStamp sampleTime;
-        if ( test_mode ){
-            frame.x(1.0f);
-            frame.y(0.0f);
-            frame.z(1.0f);
-            frame.yaw(180.0f / 180.0f * M_PI);
-        }
-        od4.send(frame, sampleTime, 0);
-        od4.send(cfState, sampleTime, 0);
-
-        // frame.x(0.3f);
-        // frame.y(0.3f);
-        // frame.z(0.1f);
-        // frame.yaw(0.0f);  
-        // od4.send(frame, sampleTime, 2);
-
-        if ((bool)*isFinishedPtr)
-        {
-            *isCallbackFinishedPtr = true;
-            waitTillFinishedPtr->notify_all();
-            return false;
-        }
-        return true;
-    },"test");
-
-    // res = cf.createLogBlock({
-    //     {"pm", "vbat"}},
-    //     "test_pm");
-    // if (res < 0)
-    //     std::cout << "creation Error: " << res << std::endl;
-
-    // std::mutex mu_1;
-    // std::unique_lock<std::mutex> lock_1(mu_1);
-    // std::mutex *muPtr_1 = &mu_1;
-    // std::condition_variable waitTillFinished_1;
-    // std::condition_variable *waitTillFinishedPtr_1 = &waitTillFinished_1;
-    // std::atomic<bool> isFinished_1(false);
-    // std::atomic<bool> *isFinishedPtr_1 = &isFinished_1;
-    // std::atomic<bool> isCallbackFinished_1(false);
-    // std::atomic<bool> *isCallbackFinishedPtr_1 = &isCallbackFinished_1;
-    // cf.addLogCallback([isFinishedPtr_1, muPtr_1, waitTillFinishedPtr_1, isCallbackFinishedPtr_1](const std::map<TocItem,boost::spirit::hold_any>& tocItemsAndValues, uint32_t period)
-    // {
-    //     std::cout <<"  period:  " << period << "  battery val=  ";
-    //     for(auto element : tocItemsAndValues){            
-    //         std::cout << element.second<<"  ";
-    //     }
-    //     std::cout << std::endl;
-
-    //     if ((bool)*isFinishedPtr_1)
-    //     {
-    //         *isCallbackFinishedPtr_1 = true;
-    //         waitTillFinishedPtr_1->notify_all();
-    //         return false;
-    //     }
-    //     return true;
-    // },"test_pm");
-    // res = cf.startLogBlock(1000, "test_pm");
-    // if (res < 0)
-    //     std::cout << "starting Error: " << res << std::endl;
-    // std::cout << "pass " << res << std::endl;
-    
-    // Create thread to listen to od4
-    std::thread od4Thread([&od4, &cf, isFinishedPtr, &isCommandReceived, &packet]() {           
-        // Start the listening loop
-        while ((bool)*isFinishedPtr == false && od4.isRunning()) {
-            if ( isCommandReceived ){                
-                // packet.setPort((uint8_t)0x08);          // PORT 8 = HIGH_LEVEL_COMMANDER
-                cf.getCon().send(packet);
-                std::cout << "OD4Session thread: Sent command." << std::endl;
-                isCommandReceived = false;
-            }            
-        }
-        std::cout << "OD4Session thread exiting." << std::endl;
-    });
-
-    // Wait for some actions to stop the process
-    std::cout << "Press Enter to exit..." << std::endl;
-    lock.unlock();
-    // lock_1.unlock();
-    std::cin.getline(nullptr, 0, '\n');
-    lock.lock();
-    // lock.lock();
-    isFinished = true;
-    // isFinished_1 = true;
-    
-    // Wait for all threads to finish
-    if (od4Thread.joinable()) {
-        od4Thread.join();
+        catch(std::exception& e){
+            std::cerr << "Has some error with: " << e.what() << std::endl;
+            if ( !InitializeCrazyflie( cf, logBlock, str_uri, od4, verbose, test_mode, frame_id) )
+                return 1;    
+            std::cout << "Reconnected to crazyflie, sleep for a while..." << std::endl;
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }        
     }
-    waitTillFinished.wait(lock, [isCallbackFinishedPtr]()
-                          { return (bool)*isCallbackFinishedPtr; });   
-    // waitTillFinished_1.wait(lock_1, [isCallbackFinishedPtr_1]()
-    //                     { return (bool)*isCallbackFinishedPtr_1; });  
-    std::cout << "Program exiting." << std::endl;
 
     retCode = 0;
     return retCode;

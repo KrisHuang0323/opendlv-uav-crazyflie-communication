@@ -91,12 +91,12 @@ bool InitializeCrazyflie(std::unique_ptr<Crazyflie>& cf, std::unique_ptr<LogBloc
             frame.pitch(data->pitch / 180.0f * M_PI);
             frame.yaw(data->yaw / 180.0f * M_PI);
             
-            if ( test_mode ){
-                frame.x(1.0f);
-                frame.y(0.0f);
-                frame.z(1.0f);
-                frame.yaw(180.0f / 180.0f * M_PI);
-            }
+            // if ( test_mode ){
+            //     frame.x(1.0f);
+            //     frame.y(0.0f);
+            //     frame.z(1.0f);
+            //     frame.yaw(180.0f / 180.0f * M_PI);
+            // }
 
             cluon::data::TimeStamp sampleTime;
             od4.send(frame, sampleTime, frame_id);
@@ -115,7 +115,7 @@ bool InitializeCrazyflie(std::unique_ptr<Crazyflie>& cf, std::unique_ptr<LogBloc
             {"pm", "vbat"}
             // {"pm", "chargeCurrent"}
             }, cb));
-        logBlock->start(10); // 100ms
+        logBlock->start(1); // 100ms -> 10
 
         // Check that whether the connection succeed
         // std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -220,31 +220,32 @@ int32_t main(int32_t argc, char **argv) {
         try{
             if (true) {
                 cf->sendPing();
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
+            // continue;
             // std::cout << "Connection succeed!!" << std::endl;
 
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            // std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
             if ( isCommandReceived == false )
                 continue;
 
             int16_t group_mask = 0;
-            // std::cout << "Received command..." << std::endl;
+            std::cout << "Received command..." << std::endl;
             switch (inputCommand.Type)
             {
                 case 0: // Takeoff
-                    cf->takeoff(inputCommand.height, 0.0f, group_mask);
+                    cf->takeoff(inputCommand.height, inputCommand.time, group_mask);
                     break;
                 case 1: // Land
-                    cf->land(inputCommand.height, 0.0f, group_mask);
+                    cf->land(inputCommand.height, inputCommand.time, group_mask);
                     break;
                 case 2: // Stop
                     cf->stop(group_mask);
                     break;
                 case 3: // Goto
                     {
-                        bool relative = false;
+                        bool relative = true;
                         cf->goTo(inputCommand.x, inputCommand.y, inputCommand.z, inputCommand.yaw, inputCommand.time, relative, group_mask);
                         break;                        
                     }                    
